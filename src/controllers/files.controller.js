@@ -1,6 +1,8 @@
 import path from 'path';
 import { filesService } from '../services/files.service.js';
 
+const normalizePath = (p) => p.split(path.sep).join('/');
+
 export const filesController = {
   upload: async (req, res, next) => {
     try {
@@ -8,10 +10,7 @@ export const filesController = {
         return res.status(400).json({ message: 'No file provided.' });
       }
 
-      // important : renvoyer un chemin relatif "stable" (pas un chemin Windows absolu)
-      // req.file.path peut être "uploads\\musics\\..." sous Windows
-      // L'objectif est de retourner un path normalisé
-      const normalizedPath = req.file.path.split(path.sep).join('/');
+      const normalizedPath = normalizePath(req.file.path);
 
       const folder = (req.body.folder || 'misc').replace(/[^a-zA-Z0-9_-]/g, '');
 
@@ -25,7 +24,30 @@ export const filesController = {
 
       return res.status(201).json(asset);
     } catch (e) {
-      next(e);
+      return next(e);
+    }
+  },
+
+  update: async (req, res, next) => {
+    try {
+      const { id } = req.params;
+
+      if (!req.file) {
+        return res.status(400).json({ message: 'No file provided.' });
+      }
+
+      const normalizedPath = normalizePath(req.file.path);
+
+      const updated = await filesService.updateAssetFile(id, {
+        path: normalizedPath,
+        originalName: req.file.originalname,
+        mimeType: req.file.mimetype,
+        size: req.file.size,
+      });
+
+      return res.status(200).json(updated);
+    } catch (e) {
+      return next(e);
     }
   },
 };

@@ -6,7 +6,26 @@ import { assetsRepository } from '../repositories/assets.repository.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-//PARLER de la notion d'asset ID
+const toAbsolutePath = (storedPath) => {
+  // storedPath peut être relatif ("uploads/musics/...") ou absolu
+  return path.isAbsolute(storedPath)
+    ? storedPath
+    : path.join(__dirname, '..', '..', storedPath);
+};
+
+const toResponse = (asset) => ({
+  id: asset.id,
+  scope: asset.scope,
+  path: asset.path,
+  originalName: asset.originalName,
+  mimeType: asset.mimeType,
+  size: asset.size,
+  createdAt: asset.createdAt,
+  updatedAt: asset.updatedAt,
+  url: `/api/files/${asset.id}/download`,
+});
+
+// PARLER de la notion d'asset ID
 export const filesService = {
   async createAsset(data) {
     const created = await assetsRepository.create({
@@ -17,16 +36,7 @@ export const filesService = {
       size: data.size,
     });
 
-    return {
-      id: created.id,
-      scope: created.scope,
-      path: created.path,
-      originalName: created.originalName,
-      mimeType: created.mimeType,
-      size: created.size,
-      createdAt: created.createdAt,
-      url: `/api/files/${created.id}/download`,
-    };
+    return toResponse(created);
   },
 
   async getAsset(id) {
@@ -41,18 +51,40 @@ export const filesService = {
 
   async getAssetFile(id) {
     const asset = await this.getAsset(id);
-    const absolutePath = path.isAbsolute(asset.path)
-      ? asset.path
-      : path.join(__dirname, '..', '..', asset.path);
-
+    const absolutePath = toAbsolutePath(asset.path);
     return { asset, absolutePath };
+  },
+
+  async updateAssetFile(id, data) {
+    const asset = await this.getAsset(id);
+
+    const oldAbsolutePath = toAbsolutePath(asset.path);
+
+    // On met à jour l’asset en DB
+    const updated = await assetsRepository.updateById(id, {
+      // on garde le scope existant (ou tu peux autoriser data.scope)
+      path: data.path ?? asset.path,
+      originalName: data.originalName ?? asset.originalName,
+      mimeType: data.mimeType ?? asset.mimeType,
+      size: data.size ?? asset.size,
+    });
+
+    // Best effort: supprimer l'ancien fichier
+    try {
+      await fs.unlink(oldAbsolutePath);
+    } catch (e) {
+      console.warn('Could not delete old file:', e.message);
+    }
+
+    return toResponse(updated);
   },
 
   async deleteAsset(id) {
     const asset = await this.getAsset(id);
+    const absolutePath = toAbsolutePath(asset.path);
 
     try {
-      await fs.unlink(asset.path);
+      await fs.unlink(absolutePath);
     } catch (e) {
       console.warn('Could not delete file:', e.message);
     }

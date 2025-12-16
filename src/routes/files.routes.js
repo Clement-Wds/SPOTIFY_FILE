@@ -6,5 +6,6 @@ import { uploadSingle } from '../middlewares/upload.middleware.js';
 const router = Router();
 
 router.post('/', requireServiceToken, uploadSingle, filesController.upload);
+router.put('/:id', requireServiceToken, uploadSingle, filesController.update);
 
 export default router;
